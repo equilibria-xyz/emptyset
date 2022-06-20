@@ -1,3 +1,5 @@
+require("@nomiclabs/hardhat-ethers");
+require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-truffle5");
 require("@nomiclabs/hardhat-web3");
 require("hardhat-gas-reporter");

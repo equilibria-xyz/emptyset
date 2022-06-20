@@ -13,7 +13,7 @@ describe("Implementation", function () {
   let ownerAddress, userAddress;
 
   beforeEach(async function () {
-    [ownerAddress, userAddress] = await web3.eth.getAccounts();
+    [ownerAddress, userAddress] = await ethers.getSigners();
     this.timelockA = await Timelock.new(ownerAddress, 86400 * 2, {
       from: ownerAddress,
     });
