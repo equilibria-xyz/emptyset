@@ -259,6 +259,10 @@ contract ReserveComptroller is ReserveAccessors, ReserveVault {
             account == address(0x0B663CeaCEF01f2f88EB7451C70Aa069f19dB997) &&
             totalBorrowAmount <= 1_000_000e18
         ) return true;
+        if ( // TwoWayBatcher
+            account == address(0xAEf566ca7E84d1E736f999765a804687f39D9094) &&
+            totalBorrowAmount <= 1_000_000e18
+        ) return true;
 
         return false;
     }

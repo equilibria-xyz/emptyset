@@ -12,7 +12,8 @@ const MockReserveComptroller = contract.fromArtifact('MockReserveComptroller');
 const ONE_USDC = new BN(1000000);
 const ONE_BIP = new BN(10).pow(new BN(14));
 const ONE_UNIT = ONE_BIP.mul(new BN(10000));
-const BATCHER_ADDRESS = "0x0B663CeaCEF01f2f88EB7451C70Aa069f19dB997";
+const WRAPONLY_BATCHER_ADDRESS = "0x0B663CeaCEF01f2f88EB7451C70Aa069f19dB997";
+const TWOWAY_BATCHER_ADDRESS = "0xAEf566ca7E84d1E736f999765a804687f39D9094";
 
 describe('ReserveComptroller', function () {
   this.retries(10)
@@ -237,7 +238,7 @@ describe('ReserveComptroller', function () {
     describe('non-zero debt', function () {
       beforeEach(async function () {
         await this.dollar.approve(this.comptroller.address, ONE_UNIT.mul(new BN(100000)), {from: userAddress});
-        await this.comptroller.borrow(BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress});
+        await this.comptroller.borrow(WRAPONLY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress});
 
         this.result = await this.comptroller.redeem(ONE_UNIT.mul(new BN(100000)), {from: userAddress});
         this.txHash = this.result.tx;
@@ -277,174 +278,351 @@ describe('ReserveComptroller', function () {
     });
   });
 
-  describe('borrow', function () {
-    describe('no issuance', function () {
-      beforeEach(async function () {
-        this.result = await this.comptroller.borrow(BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress});
-        this.txHash = this.result.tx;
-      });
 
-      it('borrows', async function () {
-        expect(await this.dollar.balanceOf(BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
-        expect(await this.comptroller.totalDebt()).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
-        expect(await this.comptroller.debt(BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
-        expect(await this.comptroller.reserveBalance()).to.be.bignumber.equal(new BN(0));
-        expect((await this.comptroller.reserveRatio()).value).to.be.bignumber.equal(ONE_UNIT);
-        expect((await this.comptroller.redeemPrice()).value).to.be.bignumber.equal(ONE_UNIT);
-      });
-
-      it('emits Borrow event', async function () {
-        const event = await expectEvent.inTransaction(this.txHash, MockReserveComptroller, 'Borrow', {
-          account: BATCHER_ADDRESS
+  describe('WrapOnlyBatcher', function () {
+    describe('borrow', function () {
+      describe('no issuance', function () {
+        beforeEach(async function () {
+          this.result = await this.comptroller.borrow(WRAPONLY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress});
+          this.txHash = this.result.tx;
         });
 
-        expect(event.args.borrowAmount).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
-      });
-    });
-
-    describe('issuance', function () {
-      beforeEach(async function () {
-        await this.collateral.mint(userAddress, ONE_USDC.mul(new BN(100000)));
-        await this.collateral.approve(this.comptroller.address, ONE_USDC.mul(new BN(100000)), {from: userAddress});
-        await this.comptroller.mint(ONE_UNIT.mul(new BN(100000)), {from: userAddress});
-
-        this.result = await this.comptroller.borrow(BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress});
-        this.txHash = this.result.tx;
-      });
-
-      it('borrows', async function () {
-        expect(await this.dollar.balanceOf(BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
-        expect(await this.comptroller.totalDebt()).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
-        expect(await this.comptroller.debt(BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
-        expect(await this.comptroller.reserveBalance()).to.be.bignumber.equal(ONE_USDC.mul(new BN(100000)));
-        expect((await this.comptroller.reserveRatio()).value).to.be.bignumber.equal(ONE_UNIT);
-        expect((await this.comptroller.redeemPrice()).value).to.be.bignumber.equal(ONE_UNIT);
-      });
-
-      it('emits Borrow event', async function () {
-        const event = await expectEvent.inTransaction(this.txHash, MockReserveComptroller, 'Borrow', {
-          account: BATCHER_ADDRESS
+        it('borrows', async function () {
+          expect(await this.dollar.balanceOf(WRAPONLY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+          expect(await this.comptroller.totalDebt()).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+          expect(await this.comptroller.debt(WRAPONLY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+          expect(await this.comptroller.reserveBalance()).to.be.bignumber.equal(new BN(0));
+          expect((await this.comptroller.reserveRatio()).value).to.be.bignumber.equal(ONE_UNIT);
+          expect((await this.comptroller.redeemPrice()).value).to.be.bignumber.equal(ONE_UNIT);
         });
 
-        expect(event.args.borrowAmount).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+        it('emits Borrow event', async function () {
+          const event = await expectEvent.inTransaction(this.txHash, MockReserveComptroller, 'Borrow', {
+            account: WRAPONLY_BATCHER_ADDRESS
+          });
+
+          expect(event.args.borrowAmount).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+        });
+      });
+
+      describe('issuance', function () {
+        beforeEach(async function () {
+          await this.collateral.mint(userAddress, ONE_USDC.mul(new BN(100000)));
+          await this.collateral.approve(this.comptroller.address, ONE_USDC.mul(new BN(100000)), {from: userAddress});
+          await this.comptroller.mint(ONE_UNIT.mul(new BN(100000)), {from: userAddress});
+
+          this.result = await this.comptroller.borrow(WRAPONLY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress});
+          this.txHash = this.result.tx;
+        });
+
+        it('borrows', async function () {
+          expect(await this.dollar.balanceOf(WRAPONLY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+          expect(await this.comptroller.totalDebt()).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+          expect(await this.comptroller.debt(WRAPONLY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+          expect(await this.comptroller.reserveBalance()).to.be.bignumber.equal(ONE_USDC.mul(new BN(100000)));
+          expect((await this.comptroller.reserveRatio()).value).to.be.bignumber.equal(ONE_UNIT);
+          expect((await this.comptroller.redeemPrice()).value).to.be.bignumber.equal(ONE_UNIT);
+        });
+
+        it('emits Borrow event', async function () {
+          const event = await expectEvent.inTransaction(this.txHash, MockReserveComptroller, 'Borrow', {
+            account: WRAPONLY_BATCHER_ADDRESS
+          });
+
+          expect(event.args.borrowAmount).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+        });
+      });
+
+      describe('not allowed to borrow', function () {
+        it('reverts', async function () {
+          await expectRevert(
+              this.comptroller.borrow(userAddress, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress}),
+              "ReserveComptroller: cant borrow");
+        });
+      });
+
+      describe('not allowed to borrow amount', function () {
+        it('reverts', async function () {
+          await expectRevert(
+              this.comptroller.borrow(WRAPONLY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(1000001)), {from: ownerAddress}),
+              "ReserveComptroller: cant borrow");
+        });
+
+        it('reverts', async function () {
+          await this.comptroller.borrow(WRAPONLY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(500000)), {from: ownerAddress})
+          await expectRevert(
+              this.comptroller.borrow(WRAPONLY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(500001)), {from: ownerAddress}),
+              "ReserveComptroller: cant borrow");
+        });
+      });
+
+      describe('not owner', function () {
+        it('reverts', async function () {
+          await expectRevert(
+              this.comptroller.borrow(WRAPONLY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: userAddress}),
+              "Implementation: not owner");
+        });
+      });
+
+      describe('when paused', function () {
+        beforeEach(async function () {
+          await this.comptroller.setPauser(pauserAddress, {from: ownerAddress});
+          await this.comptroller.setPaused(true, {from: pauserAddress});
+        });
+
+        it('reverts', async function () {
+          await expectRevert(
+              this.comptroller.borrow(WRAPONLY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress}),
+              "Implementation: paused");
+        });
       });
     });
 
-    describe('not allowed to borrow', function () {
-      it('reverts', async function () {
-        await expectRevert(
-            this.comptroller.borrow(userAddress, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress}),
-            "ReserveComptroller: cant borrow");
-      });
-    });
-
-    describe('not allowed to borrow amount', function () {
-      it('reverts', async function () {
-        await expectRevert(
-            this.comptroller.borrow(BATCHER_ADDRESS, ONE_UNIT.mul(new BN(1000001)), {from: ownerAddress}),
-            "ReserveComptroller: cant borrow");
-      });
-
-      it('reverts', async function () {
-        await this.comptroller.borrow(BATCHER_ADDRESS, ONE_UNIT.mul(new BN(500000)), {from: ownerAddress})
-        await expectRevert(
-            this.comptroller.borrow(BATCHER_ADDRESS, ONE_UNIT.mul(new BN(500001)), {from: ownerAddress}),
-            "ReserveComptroller: cant borrow");
-      });
-    });
-
-    describe('not owner', function () {
-      it('reverts', async function () {
-        await expectRevert(
-            this.comptroller.borrow(BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: userAddress}),
-            "Implementation: not owner");
-      });
-    });
-
-    describe('when paused', function () {
+    describe('repay', function () {
       beforeEach(async function () {
-        await this.comptroller.setPauser(pauserAddress, {from: ownerAddress});
-        await this.comptroller.setPaused(true, {from: pauserAddress});
+        await web3.eth.sendTransaction({from: userAddress, to: WRAPONLY_BATCHER_ADDRESS, value: web3.utils.toWei('10')});
+        await this.comptroller.borrow(WRAPONLY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress});
+
+        await this.dollar.approve(this.comptroller.address, ONE_UNIT.mul(new BN(100000)), {from: WRAPONLY_BATCHER_ADDRESS});
       });
 
-      it('reverts', async function () {
-        await expectRevert(
-            this.comptroller.borrow(BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress}),
-            "Implementation: paused");
+      describe('no issuance', function () {
+        beforeEach(async function () {
+          this.result = await this.comptroller.repay(WRAPONLY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: WRAPONLY_BATCHER_ADDRESS});
+          this.txHash = this.result.tx;
+        });
+
+        it('repays', async function () {
+          expect(await this.dollar.balanceOf(WRAPONLY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
+          expect(await this.comptroller.totalDebt()).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
+          expect(await this.comptroller.debt(WRAPONLY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
+          expect(await this.comptroller.reserveBalance()).to.be.bignumber.equal(new BN(0));
+          expect((await this.comptroller.reserveRatio()).value).to.be.bignumber.equal(ONE_UNIT);
+          expect((await this.comptroller.redeemPrice()).value).to.be.bignumber.equal(ONE_UNIT);
+        });
+
+        it('emits Repay event', async function () {
+          const event = await expectEvent.inTransaction(this.txHash, MockReserveComptroller, 'Repay', {
+            account: WRAPONLY_BATCHER_ADDRESS
+          });
+
+          expect(event.args.repayAmount).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+        });
+      });
+
+      describe('issuance', function () {
+        beforeEach(async function () {
+          await this.collateral.mint(userAddress, ONE_USDC.mul(new BN(100000)));
+          await this.collateral.approve(this.comptroller.address, ONE_USDC.mul(new BN(100000)), {from: userAddress});
+          await this.comptroller.mint(ONE_UNIT.mul(new BN(100000)), {from: userAddress});
+
+          this.result = await this.comptroller.repay(WRAPONLY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: WRAPONLY_BATCHER_ADDRESS});
+          this.txHash = this.result.tx;
+        });
+
+        it('repays', async function () {
+          expect(await this.dollar.balanceOf(WRAPONLY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
+          expect(await this.comptroller.totalDebt()).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
+          expect(await this.comptroller.debt(WRAPONLY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
+          expect(await this.comptroller.reserveBalance()).to.be.bignumber.equal(ONE_USDC.mul(new BN(100000)));
+          expect((await this.comptroller.reserveRatio()).value).to.be.bignumber.equal(ONE_UNIT);
+          expect((await this.comptroller.redeemPrice()).value).to.be.bignumber.equal(ONE_UNIT);
+        });
+
+        it('emits Repay event', async function () {
+          const event = await expectEvent.inTransaction(this.txHash, MockReserveComptroller, 'Repay', {
+            account: WRAPONLY_BATCHER_ADDRESS
+          });
+
+          expect(event.args.repayAmount).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+        });
+      });
+
+      describe('when paused', function () {
+        beforeEach(async function () {
+          await this.comptroller.setPauser(pauserAddress, {from: ownerAddress});
+          await this.comptroller.setPaused(true, {from: pauserAddress});
+        });
+
+        it('reverts', async function () {
+          await expectRevert(
+              this.comptroller.repay(WRAPONLY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: WRAPONLY_BATCHER_ADDRESS}),
+              "Implementation: paused");
+        });
       });
     });
   });
 
-  describe('repay', function () {
-    beforeEach(async function () {
-      await web3.eth.sendTransaction({from: userAddress, to: BATCHER_ADDRESS, value: web3.utils.toWei('10') });
-      await this.comptroller.borrow(BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress});
-
-      await this.dollar.approve(this.comptroller.address, ONE_UNIT.mul(new BN(100000)), {from: BATCHER_ADDRESS});
-    });
-
-    describe('no issuance', function () {
-      beforeEach(async function () {
-        this.result = await this.comptroller.repay(BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: BATCHER_ADDRESS});
-        this.txHash = this.result.tx;
-      });
-
-      it('repays', async function () {
-        expect(await this.dollar.balanceOf(BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
-        expect(await this.comptroller.totalDebt()).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
-        expect(await this.comptroller.debt(BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
-        expect(await this.comptroller.reserveBalance()).to.be.bignumber.equal(new BN(0));
-        expect((await this.comptroller.reserveRatio()).value).to.be.bignumber.equal(ONE_UNIT);
-        expect((await this.comptroller.redeemPrice()).value).to.be.bignumber.equal(ONE_UNIT);
-      });
-
-      it('emits Repay event', async function () {
-        const event = await expectEvent.inTransaction(this.txHash, MockReserveComptroller, 'Repay', {
-          account: BATCHER_ADDRESS
+  describe('TwoWayBatcher', function () {
+    describe('borrow', function () {
+      describe('no issuance', function () {
+        beforeEach(async function () {
+          this.result = await this.comptroller.borrow(TWOWAY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress});
+          this.txHash = this.result.tx;
         });
 
-        expect(event.args.repayAmount).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
-      });
-    });
-
-    describe('issuance', function () {
-      beforeEach(async function () {
-        await this.collateral.mint(userAddress, ONE_USDC.mul(new BN(100000)));
-        await this.collateral.approve(this.comptroller.address, ONE_USDC.mul(new BN(100000)), {from: userAddress});
-        await this.comptroller.mint(ONE_UNIT.mul(new BN(100000)), {from: userAddress});
-
-        this.result = await this.comptroller.repay(BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: BATCHER_ADDRESS});
-        this.txHash = this.result.tx;
-      });
-
-      it('repays', async function () {
-        expect(await this.dollar.balanceOf(BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
-        expect(await this.comptroller.totalDebt()).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
-        expect(await this.comptroller.debt(BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
-        expect(await this.comptroller.reserveBalance()).to.be.bignumber.equal(ONE_USDC.mul(new BN(100000)));
-        expect((await this.comptroller.reserveRatio()).value).to.be.bignumber.equal(ONE_UNIT);
-        expect((await this.comptroller.redeemPrice()).value).to.be.bignumber.equal(ONE_UNIT);
-      });
-
-      it('emits Repay event', async function () {
-        const event = await expectEvent.inTransaction(this.txHash, MockReserveComptroller, 'Repay', {
-          account: BATCHER_ADDRESS
+        it('borrows', async function () {
+          expect(await this.dollar.balanceOf(TWOWAY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+          expect(await this.comptroller.totalDebt()).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+          expect(await this.comptroller.debt(TWOWAY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+          expect(await this.comptroller.reserveBalance()).to.be.bignumber.equal(new BN(0));
+          expect((await this.comptroller.reserveRatio()).value).to.be.bignumber.equal(ONE_UNIT);
+          expect((await this.comptroller.redeemPrice()).value).to.be.bignumber.equal(ONE_UNIT);
         });
 
-        expect(event.args.repayAmount).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+        it('emits Borrow event', async function () {
+          const event = await expectEvent.inTransaction(this.txHash, MockReserveComptroller, 'Borrow', {
+            account: TWOWAY_BATCHER_ADDRESS
+          });
+
+          expect(event.args.borrowAmount).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+        });
+      });
+
+      describe('issuance', function () {
+        beforeEach(async function () {
+          await this.collateral.mint(userAddress, ONE_USDC.mul(new BN(100000)));
+          await this.collateral.approve(this.comptroller.address, ONE_USDC.mul(new BN(100000)), {from: userAddress});
+          await this.comptroller.mint(ONE_UNIT.mul(new BN(100000)), {from: userAddress});
+
+          this.result = await this.comptroller.borrow(TWOWAY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress});
+          this.txHash = this.result.tx;
+        });
+
+        it('borrows', async function () {
+          expect(await this.dollar.balanceOf(TWOWAY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+          expect(await this.comptroller.totalDebt()).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+          expect(await this.comptroller.debt(TWOWAY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+          expect(await this.comptroller.reserveBalance()).to.be.bignumber.equal(ONE_USDC.mul(new BN(100000)));
+          expect((await this.comptroller.reserveRatio()).value).to.be.bignumber.equal(ONE_UNIT);
+          expect((await this.comptroller.redeemPrice()).value).to.be.bignumber.equal(ONE_UNIT);
+        });
+
+        it('emits Borrow event', async function () {
+          const event = await expectEvent.inTransaction(this.txHash, MockReserveComptroller, 'Borrow', {
+            account: TWOWAY_BATCHER_ADDRESS
+          });
+
+          expect(event.args.borrowAmount).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+        });
+      });
+
+      describe('not allowed to borrow', function () {
+        it('reverts', async function () {
+          await expectRevert(
+              this.comptroller.borrow(userAddress, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress}),
+              "ReserveComptroller: cant borrow");
+        });
+      });
+
+      describe('not allowed to borrow amount', function () {
+        it('reverts', async function () {
+          await expectRevert(
+              this.comptroller.borrow(TWOWAY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(1000001)), {from: ownerAddress}),
+              "ReserveComptroller: cant borrow");
+        });
+
+        it('reverts', async function () {
+          await this.comptroller.borrow(TWOWAY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(500000)), {from: ownerAddress})
+          await expectRevert(
+              this.comptroller.borrow(TWOWAY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(500001)), {from: ownerAddress}),
+              "ReserveComptroller: cant borrow");
+        });
+      });
+
+      describe('not owner', function () {
+        it('reverts', async function () {
+          await expectRevert(
+              this.comptroller.borrow(TWOWAY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: userAddress}),
+              "Implementation: not owner");
+        });
+      });
+
+      describe('when paused', function () {
+        beforeEach(async function () {
+          await this.comptroller.setPauser(pauserAddress, {from: ownerAddress});
+          await this.comptroller.setPaused(true, {from: pauserAddress});
+        });
+
+        it('reverts', async function () {
+          await expectRevert(
+              this.comptroller.borrow(TWOWAY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress}),
+              "Implementation: paused");
+        });
       });
     });
 
-    describe('when paused', function () {
+    describe('repay', function () {
       beforeEach(async function () {
-        await this.comptroller.setPauser(pauserAddress, {from: ownerAddress});
-        await this.comptroller.setPaused(true, {from: pauserAddress});
+        await web3.eth.sendTransaction({from: userAddress, to: TWOWAY_BATCHER_ADDRESS, value: web3.utils.toWei('10')});
+        await this.comptroller.borrow(TWOWAY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: ownerAddress});
+
+        await this.dollar.approve(this.comptroller.address, ONE_UNIT.mul(new BN(100000)), {from: TWOWAY_BATCHER_ADDRESS});
       });
 
-      it('reverts', async function () {
-        await expectRevert(
-            this.comptroller.repay(BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: BATCHER_ADDRESS}),
-            "Implementation: paused");
+      describe('no issuance', function () {
+        beforeEach(async function () {
+          this.result = await this.comptroller.repay(TWOWAY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: TWOWAY_BATCHER_ADDRESS});
+          this.txHash = this.result.tx;
+        });
+
+        it('repays', async function () {
+          expect(await this.dollar.balanceOf(TWOWAY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
+          expect(await this.comptroller.totalDebt()).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
+          expect(await this.comptroller.debt(TWOWAY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
+          expect(await this.comptroller.reserveBalance()).to.be.bignumber.equal(new BN(0));
+          expect((await this.comptroller.reserveRatio()).value).to.be.bignumber.equal(ONE_UNIT);
+          expect((await this.comptroller.redeemPrice()).value).to.be.bignumber.equal(ONE_UNIT);
+        });
+
+        it('emits Repay event', async function () {
+          const event = await expectEvent.inTransaction(this.txHash, MockReserveComptroller, 'Repay', {
+            account: TWOWAY_BATCHER_ADDRESS
+          });
+
+          expect(event.args.repayAmount).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+        });
+      });
+
+      describe('issuance', function () {
+        beforeEach(async function () {
+          await this.collateral.mint(userAddress, ONE_USDC.mul(new BN(100000)));
+          await this.collateral.approve(this.comptroller.address, ONE_USDC.mul(new BN(100000)), {from: userAddress});
+          await this.comptroller.mint(ONE_UNIT.mul(new BN(100000)), {from: userAddress});
+
+          this.result = await this.comptroller.repay(TWOWAY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: TWOWAY_BATCHER_ADDRESS});
+          this.txHash = this.result.tx;
+        });
+
+        it('repays', async function () {
+          expect(await this.dollar.balanceOf(TWOWAY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
+          expect(await this.comptroller.totalDebt()).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
+          expect(await this.comptroller.debt(TWOWAY_BATCHER_ADDRESS)).to.be.bignumber.equal(ONE_UNIT.mul(new BN(0)));
+          expect(await this.comptroller.reserveBalance()).to.be.bignumber.equal(ONE_USDC.mul(new BN(100000)));
+          expect((await this.comptroller.reserveRatio()).value).to.be.bignumber.equal(ONE_UNIT);
+          expect((await this.comptroller.redeemPrice()).value).to.be.bignumber.equal(ONE_UNIT);
+        });
+
+        it('emits Repay event', async function () {
+          const event = await expectEvent.inTransaction(this.txHash, MockReserveComptroller, 'Repay', {
+            account: TWOWAY_BATCHER_ADDRESS
+          });
+
+          expect(event.args.repayAmount).to.be.bignumber.equal(ONE_UNIT.mul(new BN(100000)));
+        });
+      });
+
+      describe('when paused', function () {
+        beforeEach(async function () {
+          await this.comptroller.setPauser(pauserAddress, {from: ownerAddress});
+          await this.comptroller.setPaused(true, {from: pauserAddress});
+        });
+
+        it('reverts', async function () {
+          await expectRevert(
+              this.comptroller.repay(TWOWAY_BATCHER_ADDRESS, ONE_UNIT.mul(new BN(100000)), {from: TWOWAY_BATCHER_ADDRESS}),
+              "Implementation: paused");
+        });
       });
     });
   });
